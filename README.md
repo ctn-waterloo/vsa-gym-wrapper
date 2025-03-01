@@ -40,17 +40,17 @@ A PyPI release is planned for the future.
 
 Vector Symbolic Architecture (VSA) is a framework for representing structured data in high-dimensional spaces. Spatial Semantic Pointers (SSPs) are a specific type of VSA representation designed to encode continuous spatial information efficiently.
 
-A Spatial Semantic Pointer (SSP) represents a value \( \mathbf{x} \in \mathbb{R}^n \) in the Holographic Reduced Representation (HRR) VSA as:
+A Spatial Semantic Pointer (SSP) represents a value $ \mathbf{x} \in \mathbb{R}^n $ in the Holographic Reduced Representation (HRR) VSA as:
 
-\[ \phi(\mathbf{x}) = W^{-1} e^{ i A  \mathbf{x}/ \ell }  \]
+$$ \phi(\mathbf{x}) = W^{-1} e^{ i A  \mathbf{x}/ \ell }  $$
 
 where:
-- \( W^{-1} \) is the inverse Discrete Fourier Transform (DFT) matrix.
-- \( A \in \mathbb{R}^{d \times n} \) is the **phase matrix**.
-- \( \ell \in \mathbb{R}^{n} \) is the **length scale**.
+- $W^{-1}$ is the inverse Discrete Fourier Transform (DFT) matrix.
+- $A \in \mathbb{R}^{d \times n}$ is the **phase matrix**.
+- $\ell \in \mathbb{R}^{n}$ is the **length scale**.
 - The exponential function is applied element-wise.
 
-Both `A` and `\ell` are free parameters. When `A` is randomly initialized, the representation behaves similarly to a Random Fourier Feature.
+Both $A$ and $\ell$ are free parameters. When $A$ is randomly initialized, the representation behaves similarly to a Random Fourier Feature.
 
 
 SSPs and VSAs are useful in reinforcement learning because they:
@@ -86,29 +86,33 @@ The package provides `SSPFeaturesExtractor`, a PyTorch module (subclass of `Base
 
 ### MiniGrid Wrappers
 
-- **SSPMiniGridPoseWrapper:** Encodes the agent’s position \( (x, y, \theta) \) using SSPs:
+- **SSPMiniGridPoseWrapper:** Encodes the agent’s position $(x, y, \theta) $ using SSPs:
   
-  \[ \phi_{\text{pose}} = \phi \left ( [x,y,\theta] \right ) \]
+  $$\phi_{\text{pose}} = \phi \left ( [x,y,\theta] \right ) $$
   
-  where \( x, y \) are the agent’s global coordinates and \( \theta \) represents orientation (0-3 discrete values).
+  where $x, y$ are the agent’s global coordinates and $\theta $ represents orientation (0-3 discrete values).
 
 - **SSPMiniGridViewWrapper:** Encodes both the agent’s field of view and its pose using HRR algebra. Supports two encoding methods:
     
     1. **All-bound encoding (`obj_encoding='allbound'`):**
        
-       \[ \Phi_{\text{view}} = \phi([x,y,\theta]) + \mathtt{HAS} \circledast \sum_{\text{objects carried}} \mathtt{ITEM}_i \circledast \mathtt{COLOUR}_i \circledast \mathtt{STATE}_i + \sum_{\text{objects in view}} \Delta\phi_i \circledast \mathtt{ITEM}_i \circledast \mathtt{COLOUR}_i \circledast \mathtt{STATE}_i \]
+       $$\Phi_{\text{view}} = \phi([x,y,\theta]) + \mathtt{HAS} \circledast \sum_{\text{objects carried}} \mathtt{ITEM}_i \circledast \mathtt{COLOUR}_i \circledast \mathtt{STATE}_i$$
+
+       $$+ \sum_{\text{objects in view}} \Delta\phi_i \circledast \mathtt{ITEM}_i \circledast \mathtt{COLOUR}_i \circledast \mathtt{STATE}_i$$
        
        where `ITEM`, `COLOUR`, and `STATE` vectors encode object attributes.
     
-    2. **Slot-filler encoding (`obj_encoding='slotfiller'`):**
+    3. **Slot-filler encoding (`obj_encoding='slotfiller'`):**
        
-       \[ \Phi_{\text{slot-filler}} = \phi([x,y,\theta]) + \mathtt{HAS} \circledast \sum_{\text{objects carried}} \left( \mathtt{ITEM} \circledast \mathtt{I}_i + \mathtt{COLOUR} \circledast \mathtt{C}_i + \mathtt{STATE} \circledast \mathtt{S}_i \right) + \sum_{\text{objects in view}} \Delta\phi_i \circledast \left( \mathtt{ITEM} \circledast \mathtt{I}_i + \mathtt{COLOUR} \circledast \mathtt{C}_i + \mathtt{STATE} \circledast \mathtt{S}_i \right) \]
+       $$\Phi_{\text{slot-filler}} = \phi([x,y,\theta]) + \mathtt{HAS} \circledast \sum_{\text{objects carried}} \left( \mathtt{ITEM} \circledast \mathtt{I}_i + \mathtt{COLOUR} \circledast \mathtt{C}_i + \mathtt{STATE} \circledast \mathtt{S}_i \right)$$
+ 
+       $$+ \sum_{\text{objects in view}} \Delta\phi_i \circledast \left( \mathtt{ITEM} \circledast \mathtt{I}_i + \mathtt{COLOUR} \circledast \mathtt{C}_i + \mathtt{STATE} \circledast \mathtt{S}_i \right) $$
        
        In this encoding, object similarities are preserved more effectively.
 
 - **Local vs. Global Views:**
-  - `view_type='local'`: Uses relative object positions \( \Delta\phi_i \).
-  - `view_type='global'`: Uses absolute object positions \( \phi_i \).
+  - `view_type='local'`: Uses relative object positions $\Delta\phi_i $.
+  - `view_type='global'`: Uses absolute object positions $\phi_i $.
 
 - **SSPMiniGridMissionWrapper:** Adds an SSP representation of the mission statement to the state encoding. Missions are parsed using regex to extract command structures (`GO_TO`, `PICK_UP`, etc.) and bind them to object properties.
 
