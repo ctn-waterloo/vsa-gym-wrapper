@@ -22,7 +22,8 @@ dependencies = [
   "scipy",
   "gymnasium",
    "torch",
-    "stable_baselines3"
+    "stable_baselines3",
+    "minigrid"
 ]
 license = {file = "LICENSE"}
 
