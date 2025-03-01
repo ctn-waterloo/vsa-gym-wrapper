@@ -1,7 +1,3 @@
-.PHONY : docs
-docs :
-	rm -rf docs/build/
-	sphinx-autobuild -b html --watch my_package/ docs/source/ docs/build/
 
 .PHONY : run-checks
 run-checks :
@@ -9,7 +5,7 @@ run-checks :
 	black --check .
 	ruff check .
 	mypy .
-	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --doctest-modules tests/ my_package/
+	CUDA_VISIBLE_DEVICES='' pytest -v --color=yes --doctest-modules tests/ vsagym/
 
 .PHONY : build
 build :

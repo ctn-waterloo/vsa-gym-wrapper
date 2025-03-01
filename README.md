@@ -1,112 +1,149 @@
-# python-package-template
+# vsagym: Gymnasium Environment Wrappers Using Vector Symbolic Architecture (VSA)
 
-This is a template repository for Python package projects.
+`vsagym` is a Python package that provides Gymnasium environment wrappers and tools for working with Vector Symbolic Architecture (VSA) and Spatial Semantic Pointer (SSP) representations in reinforcement learning (RL) tasks.
 
-## In this README :point_down:
 
-- [Features](#features)
-- [Usage](#usage)
-  - [Initial setup](#initial-setup)
-  - [Creating releases](#creating-releases)
-- [Projects using this template](#projects-using-this-template)
-- [FAQ](#faq)
-- [Contributing](#contributing)
+
+## Installation
+
+To install `vsagym`, run the following command:
+
+```bash
+pip install -e .
+```
+
+A PyPI release is planned for the future.
+
+### Dependencies
+- `numpy`
+- `scipy`
+- `gymnasium`
+- `torch`
+- `stable_baselines3`
+
+## TODO
+- [x] Add tests for SSPObsWrapper and SSPEnvWrapper with SSPDict spaces
+- [x] Add tests for the MiniGrid wrappers
+- [x] Edit the base feature extractor network to be consistent with new class names
+- [x] Make base feature extractor example in notebook
+- [ ] Support mission + pose (no view) in SSP minigrid wrapper
+- [ ] Edit the MiniGrid feature extractor network to be consistent with new class names
+- [ ] Write install guide, list classes, short usage examples in readme
+- [ ] Make MiniGrid usage example(s) in notebook (combine with the feature extractor too) using stablebaselines
+- [ ] Option for having the phase matrix (and/or length scale) as the output of a network instead of fixed parameters
+- [ ] Improved mission statement parsing
+- [ ] Integration with other RL frameworks (e.g., gymjax)
+- [ ] Add link to citation when the thesis is posted
+
+
+## Background: SSPs and VSAs in Reinforcement Learning
+
+Vector Symbolic Architecture (VSA) is a framework for representing structured data in high-dimensional spaces. Spatial Semantic Pointers (SSPs) are a specific type of VSA representation designed to encode continuous spatial information efficiently.
+
+A Spatial Semantic Pointer (SSP) represents a value \( \mathbf{x} \in \mathbb{R}^n \) in the Holographic Reduced Representation (HRR) VSA as:
+
+\[ \phi(\mathbf{x}) = W^{-1} e^{ i A  \mathbf{x}/ \ell }  \]
+
+where:
+- \( W^{-1} \) is the inverse Discrete Fourier Transform (DFT) matrix.
+- \( A \in \mathbb{R}^{d \times n} \) is the **phase matrix**.
+- \( \ell \in \mathbb{R}^{n} \) is the **length scale**.
+- The exponential function is applied element-wise.
+
+Both `A` and `\ell` are free parameters. When `A` is randomly initialized, the representation behaves similarly to a Random Fourier Feature.
+
+
+SSPs and VSAs are useful in reinforcement learning because they:
+- Provide a compact, compositional representation of continuous and discrete data.
+- Enable symbolic-ish manipulations of state representations.
+- Allow for structured embeddings that retain similarity relationships in state space.
 
 ## Features
 
-This template repository comes with all of the boilerplate needed for:
+### Spaces: Gymnasium Spaces
+`vsagym` defines custom Gymnasium spaces for encoding observations and actions in an SSP/VSA format.
 
-⚙️ Robust (and free) CI with [GitHub Actions](https://github.com/features/actions):
-  - Unit tests ran with [PyTest](https://docs.pytest.org) against multiple Python versions and operating systems.
-  - Type checking with [mypy](https://github.com/python/mypy).
-  - Linting with [ruff](https://astral.sh/ruff).
-  - Formatting with [isort](https://pycqa.github.io/isort/) and [black](https://black.readthedocs.io/en/stable/).
+- **SSPBox:** Encodes continuous data from a `gym.spaces.Box` space using SSPs. If not provided, the underlying mapping (an `SSPSpace` object) is automatically generated.
+- **SSPDiscrete:** Encodes discrete data from a `gym.spaces.Discrete` space using SSPs. The underlying mapping (an `SPSpace` object) is automatically generated. (Named `SSPDiscrete` instead of `SPDiscrete` for consistency.)
+- **SSPSequences:** Encodes sequences of continuous or discrete data using SSP representations. Requires an `SSPBox` or `SSPDiscrete` space.
+- **SSPDict:** A flexible space for defining SSP encodings over multiple data types. Enables binding and bundling different data types into a single compressed vector encoding (see examples in the provided notebooks).
 
-🤖 [Dependabot](https://github.blog/2020-06-01-keep-all-your-packages-up-to-date-with-dependabot/) configuration to keep your dependencies up-to-date.
+### Wrappers
+`vsagym` includes a set of wrappers to transform observations and/or actions into SSP/VSA embeddings. 
 
-📄 Great looking API documentation built using [Sphinx](https://www.sphinx-doc.org/en/master/) (run `make docs` to preview).
+- **SSPEnvWrapper:** Automatically generates SSP representations for standard Gym observation and/or action spaces.
+- **SSPObsWrapper:** Automatically generates SSP representations for standard Gym observation spaces.
 
-🚀 Automatic GitHub and PyPI releases. Just follow the steps in [`RELEASE_PROCESS.md`](./RELEASE_PROCESS.md) to trigger a new release.
+### SSP Feature Extractors
 
-## Usage
+The package provides `SSPFeaturesExtractor`, a PyTorch module (subclass of `BaseFeaturesExtractor` from `stable_baselines3`). This module integrates with `stable_baselines3` and other RL frameworks (e.g., `rlzoo`), allowing:
+- Trainable SSP parameters (e.g., length scale and transformation matrix `A`).
+- Customizable feature extraction for RL models using SSPs.
 
-### Initial setup
+## MiniGrid Support
 
-1. [Create a new repository](https://github.com/allenai/python-package-template/generate) from this template with the desired name of your project.
+`vsagym` includes specific wrappers and feature extractors for the MiniGrid environment.
 
-    *Your project name (i.e. the name of the repository) and the name of the corresponding Python package don't necessarily need to match, but you might want to check on [PyPI](https://pypi.org/) first to see if the package name you want is already taken.*
+### MiniGrid Wrappers
 
-2. Create a Python 3.8 or newer virtual environment.
+- **SSPMiniGridPoseWrapper:** Encodes the agent’s position \( (x, y, \theta) \) using SSPs:
+  
+  \[ \phi_{\text{pose}} = \phi \left ( [x,y,\theta] \right ) \]
+  
+  where \( x, y \) are the agent’s global coordinates and \( \theta \) represents orientation (0-3 discrete values).
 
-    *If you're not sure how to create a suitable Python environment, the easiest way is using [Miniconda](https://docs.conda.io/en/latest/miniconda.html). On a Mac, for example, you can install Miniconda using [Homebrew](https://brew.sh/):*
+- **SSPMiniGridViewWrapper:** Encodes both the agent’s field of view and its pose using HRR algebra. Supports two encoding methods:
+    
+    1. **All-bound encoding (`obj_encoding='allbound'`):**
+       
+       \[ \Phi_{\text{view}} = \phi([x,y,\theta]) + \mathtt{HAS} \circledast \sum_{\text{objects carried}} \mathtt{ITEM}_i \circledast \mathtt{COLOUR}_i \circledast \mathtt{STATE}_i + \sum_{\text{objects in view}} \Delta\phi_i \circledast \mathtt{ITEM}_i \circledast \mathtt{COLOUR}_i \circledast \mathtt{STATE}_i \]
+       
+       where `ITEM`, `COLOUR`, and `STATE` vectors encode object attributes.
+    
+    2. **Slot-filler encoding (`obj_encoding='slotfiller'`):**
+       
+       \[ \Phi_{\text{slot-filler}} = \phi([x,y,\theta]) + \mathtt{HAS} \circledast \sum_{\text{objects carried}} \left( \mathtt{ITEM} \circledast \mathtt{I}_i + \mathtt{COLOUR} \circledast \mathtt{C}_i + \mathtt{STATE} \circledast \mathtt{S}_i \right) + \sum_{\text{objects in view}} \Delta\phi_i \circledast \left( \mathtt{ITEM} \circledast \mathtt{I}_i + \mathtt{COLOUR} \circledast \mathtt{C}_i + \mathtt{STATE} \circledast \mathtt{S}_i \right) \]
+       
+       In this encoding, object similarities are preserved more effectively.
 
-    ```
-    brew install miniconda
-    ```
+- **Local vs. Global Views:**
+  - `view_type='local'`: Uses relative object positions \( \Delta\phi_i \).
+  - `view_type='global'`: Uses absolute object positions \( \phi_i \).
 
-    *Then you can create and activate a new Python environment by running:*
+- **SSPMiniGridMissionWrapper:** Adds an SSP representation of the mission statement to the state encoding. Missions are parsed using regex to extract command structures (`GO_TO`, `PICK_UP`, etc.) and bind them to object properties.
 
-    ```
-    conda create -n my-package python=3.9
-    conda activate my-package
-    ```
+- **SSPMiniGridWrapper:** A general-purpose interface for selecting combinations of pose, view, and mission encodings. Options:
+  - `encode_pose=True/False`
+  - `encode_view=True/False`
+  - `encode_mission=True/False` (not supported if `encode_view=False`)
 
-3. Now that you have a suitable Python environment, you're ready to personalize this repository. Just run:
+### MiniGrid Feature Extractors and Networks
 
-    ```
-    pip install -r setup-requirements.txt
-    python scripts/personalize.py
-    ```
+The package also provides specialized feature extractors and neural network components tailored for use with MiniGrid environments and SSP representations. 
 
-    And then follow the prompts.
+## Usage Examples
 
-    :pencil: *NOTE: This script will overwrite the README in your repository.*
+Detailed examples and notebooks demonstrating the use of `vsagym` are available in the repository.
 
-4. Commit and push your changes, then make sure all GitHub Actions jobs pass.
-
-5. (Optional) If you plan on publishing your package to PyPI, add repository secrets for `PYPI_USERNAME` and `PYPI_PASSWORD`. To add these, go to "Settings" > "Secrets" > "Actions", and then click "New repository secret".
-
-    *If you don't have PyPI account yet, you can [create one for free](https://pypi.org/account/register/).*
-
-6. (Optional) If you want to deploy your API docs to [readthedocs.org](https://readthedocs.org), go to the [readthedocs dashboard](https://readthedocs.org/dashboard/import/?) and import your new project.
-
-    Then click on the "Admin" button, navigate to "Automation Rules" in the sidebar, click "Add Rule", and then enter the following fields:
-
-    - **Description:** Publish new versions from tags
-    - **Match:** Custom Match
-    - **Custom match:** v[vV]
-    - **Version:** Tag
-    - **Action:** Activate version
-
-    Then hit "Save".
-
-    *After your first release, the docs will automatically be published to [your-project-name.readthedocs.io](https://your-project-name.readthedocs.io/).*
-
-### Creating releases
-
-Creating new GitHub and PyPI releases is easy. The GitHub Actions workflow that comes with this repository will handle all of that for you.
-All you need to do is follow the instructions in [RELEASE_PROCESS.md](./RELEASE_PROCESS.md).
-
-## Projects using this template
-
-Here is an incomplete list of some projects that started off with this template:
-
-- [ai2-tango](https://github.com/allenai/tango)
-- [cached-path](https://github.com/allenai/cached_path)
-- [beaker-py](https://github.com/allenai/beaker-py)
-- [gantry](https://github.com/allenai/beaker-gantry)
-- [ip-bot](https://github.com/abe-101/ip-bot)
-- [atty](https://github.com/mstuttgart/atty)
-
-☝️ *Want your work featured here? Just open a pull request that adds the link.*
-
-## FAQ
-
-#### Should I use this template even if I don't want to publish my package?
-
-Absolutely! If you don't want to publish your package, just delete the `docs/` directory and the `release` job in [`.github/workflows/main.yml`](https://github.com/allenai/python-package-template/blob/main/.github/workflows/main.yml).
 
 ## Contributing
+Contributions are welcome! If you have suggestions or improvements, please open an issue or submit a pull request.
 
-If you find a bug :bug:, please open a [bug report](https://github.com/allenai/python-package-template/issues/new?assignees=&labels=bug&template=bug_report.md&title=).
-If you have an idea for an improvement or new feature :rocket:, please open a [feature request](https://github.com/allenai/python-package-template/issues/new?assignees=&labels=Feature+request&template=feature_request.md&title=).
+## License
+
+
+## Citation
+
+If you use `vsagym` in your research, please cite the following PhD thesis:
+
+```
+@phdthesis{dumont2025,
+  author  = {Nicole Sandra-Yaffa Dumont},
+  title   = {Symbols, Dynamics, and Maps: A Neurosymbolic Approach to Spatial Cognition},
+  school  = {Univeristy of Waterloo},
+  year    = {2025}
+}
+```
+
+
+
