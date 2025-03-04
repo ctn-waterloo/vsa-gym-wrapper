@@ -5,144 +5,89 @@ from torch import nn as nn
 from gymnasium.spaces import Space
 from typing import Any, Optional, Union
 
-from vsagym.spaces import HexagonalSSPSpace, RandomSSPSpace
+# from vsagym.spaces import HexagonalSSPSpace, RandomSSPSpace
+from .ssp_feature_extractor import SSPFeaturesExtractor
+# from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+class SSPMiniGridViewFeatures(SSPFeaturesExtractor):
+    def __init__(self,
+                 observation_space: gym.spaces.Dict,
+                 features_dim: int,
+                 basis_type: str = 'hex',
+                 rng: Optional[Union[int, np.random.Generator]] = None,
+                 learn_phase_matrix: bool = True,
+                 learn_ls: bool = True,
+                 diff_ls_for_view: bool = False,
+                 view_width: int = 7, view_height: int = 7,
+                 **kwargs):
+        input_dim = 3
+        super().__init__(observation_space,
+                        features_dim, basis_type, rng, input_dim,
+                        learn_phase_matrix, learn_ls, **kwargs)
 
-class SSPMiniGridViewFeatures(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Dict, 
-                 features_dim,
-                 basis_type='hex',
-                 rng=np.random.default_rng(0),**kwargs):
-        super().__init__(observation_space, features_dim=1)
-        
-        self.input_dim = 3
-        features_dim = features_dim
-        if 'ssp_h' in kwargs:
-            initial_ls = kwargs['ssp_h']
-            if (type(initial_ls) is np.ndarray):
-                initial_ls = torch.Tensor(initial_ls.flatten())
-            elif (type(initial_ls) is list):
-                initial_ls = torch.Tensor(initial_ls)
+        if diff_ls_for_view:
+            self.length_scale_view = nn.Parameter(self.length_scale.clone().detach(),
+                                                  requires_grad=learn_ls)
         else:
-            initial_ls = 1.0
-            
-        if basis_type=='hex':
-            ssp_space = HexagonalSSPSpace(self.input_dim, features_dim,rng=rng,**kwargs)
-        elif basis_type=='rand':
-            ssp_space = RandomSSPSpace(self.input_dim, features_dim,rng=rng,**kwargs)
-            
-        self._features_dim = ssp_space.ssp_dim
-        self.nparams = (self._features_dim-1)//2
-        self.phase_matrix = torch.Tensor(ssp_space.phase_matrix)
-        #self.phase_matrix = nn.Parameter(torch.Tensor(ssp_space.phase_matrix[1:(self.nparams+1),:]),requires_grad=True)
-        self.length_scale = nn.Parameter(initial_ls*torch.ones(self.input_dim), requires_grad=True)
-        self.length_scale_view = nn.Parameter(initial_ls*torch.ones(self.input_dim), requires_grad=True)
-        
-        self.view_width = 7
-        self.view_height = 7
-        domain_bounds = np.array([ [0, self.view_width-1],
-                                  [-(self.view_height-1)//2, (self.view_height-1)//2 ],
-                                  [0,3]])
-        xs = [np.arange(domain_bounds[i,1],domain_bounds[i,0]-1,-1) for i in range(2)]
+            self.length_scale_view = self.length_scale
+        self.view_width = view_width
+        self.view_height = view_height
+        domain_bounds = np.array([[0, self.view_width - 1],
+                                  [-(self.view_height - 1) // 2, (self.view_height - 1) // 2],
+                                  [0, 3]])
+        xs = [np.arange(domain_bounds[i, 1], domain_bounds[i, 0] - 1, -1) for i in range(2)]
         xx = np.meshgrid(*xs)
-        xx[0] = 3 - xx[0]
-        xx[1] = 6 - xx[0]
         self.grid_pts = torch.Tensor(np.array(xx))
-        self.n_pts = self.grid_pts.shape[1] * self.grid_pts.shape[2]
-        self.unroll_grid_pts  = torch.vstack([self.grid_pts[0,:].flatten(), self.grid_pts[1,:].flatten(), -torch.ones(self.n_pts)]).T
-        
+        pts = np.vstack([xx[i].reshape(-1) for i in range(2)]).T
+        self.unroll_pts = torch.Tensor(np.hstack([pts, -1 * np.ones((pts.shape[0], 1))]))
+        self.n_pts = self.unroll_pts.shape[0]
 
-    def _encode(self, x, ls):
-        ls_mat = torch.atleast_2d(torch.diag(ls)).to(x.device)
-        # F = torch.zeros((self._features_dim, self.input_dim)).to(x.device)
-        # F[1:(self.nparams+1),:] = self.phase_matrix
-        # F[(self.nparams+1):,:] = -torch.flip(self.phase_matrix, dims=(0,))
-        F = self.phase_matrix
-        x = (F @ (x @ ls_mat).T).type(torch.complex64) # fix .to(x.device)
-        x = torch.fft.ifft( torch.exp( 1.j * x), axis=0 ).real.T
-        return x
-    
-    def _bind(self,a,b):
-        return torch.fft.ifft(torch.fft.fft(a, axis=-1) * torch.fft.fft(b, axis=-1), axis=-1).real
-        
     def forward(self, obs) -> torch.Tensor:
-        x = obs[:,:self.input_dim]
-        M = self._encode(x, self.length_scale)
-        
-        obj_sps = obs[:,self.input_dim:-self._features_dim].reshape(obs.shape[0],-1,self._features_dim)
-        ssp_grid_pts = self._encode(self.unroll_grid_pts.to(x.device), self.length_scale_view).reshape(1, self.n_pts, self._features_dim)
-        M += torch.sum(self._bind(obj_sps, ssp_grid_pts), axis=1)     
-        M += obs[:,-self._features_dim:]
-        M = M/torch.linalg.vector_norm(M, dim=-1, keepdim=True)
-        return M
+        x = obs[:, :self.input_dim]
 
-class SSPBabyAIViewProcesser(BaseFeaturesExtractor):
-    def __init__(self, observation_space: gym.spaces.Dict, features_dim, basis_type='hex',
-                 rng=np.random.default_rng(0),**kwargs):
-        # We do not know features-dim here before creating ssp_space,
-        # so put something dummy for now. PyTorch requires calling
-        # nn.Module.__init__ before adding modules
-        super().__init__(observation_space, features_dim=1)
-        
-        self.input_dim = 3
-        features_dim = features_dim
-        if 'ssp_h' in kwargs:
-            initial_ls = kwargs['ssp_h']
-            if (type(initial_ls) is np.ndarray):
-                initial_ls = torch.Tensor(initial_ls.flatten())
-            elif (type(initial_ls) is list):
-                initial_ls = torch.Tensor(initial_ls)
-        else:
-            initial_ls = 1.0
-            
-        if basis_type=='hex':
-            ssp_space = HexagonalSSPSpace(self.input_dim, features_dim,rng=rng,**kwargs)
-        elif basis_type=='rand':
-            ssp_space = RandomSSPSpace(self.input_dim, features_dim,rng=rng,**kwargs)
-            
-        self._features_dim = ssp_space.ssp_dim
-        self.nparams = (self._features_dim-1)//2
-        self.phase_matrix = nn.Parameter(torch.Tensor(ssp_space.phase_matrix[1:(self.nparams+1),:]),requires_grad=True)
-        self.length_scale = nn.Parameter(initial_ls*torch.ones(self.input_dim), requires_grad=True)
-        self.view_width = 7
-        self.view_height = 7
-        domain_bounds = np.array([ [0, self.view_width-1],
-                                  [-(self.view_height-1)//2, (self.view_height-1)//2 ],
-                                  [0,3]])
-        xs = [np.arange(domain_bounds[i,1],domain_bounds[i,0]-1,-1) for i in range(2)]
-        xx = np.meshgrid(*xs)
-        xx[0] = 3 - xx[0]
-        xx[1] = 6 - xx[0]
-        self.grid_pts = torch.Tensor(np.array(xx))
-        self.n_pts = self.grid_pts.shape[1] * self.grid_pts.shape[2]
-        self.unroll_grid_pts  = torch.vstack([self.grid_pts[0,:].flatten(), self.grid_pts[1,:].flatten(), -torch.ones(self.n_pts)]).T
-        
+        ls_mat = self._get_ls_matrix(x.device, self.length_scale)
+        ls_view_mat = self._get_ls_matrix(x.device, self.length_scale_view)  # different ls for ego-vec
+        F = self._get_phase_matrix(x.device)
 
-    def _encode(self, x):
-        ls_mat = torch.atleast_2d(torch.diag(1/self.length_scale)).to(x.device)
-        F = torch.zeros((self._features_dim, self.input_dim)).to(x.device)
-        F[1:(self.nparams+1),:] = self.phase_matrix
-        F[(self.nparams+1):,:] = -torch.flip(self.phase_matrix, dims=(0,))
-        x = (F @ (x @ ls_mat).T).type(torch.complex64) # fix .to(x.device)
-        x = torch.fft.ifft( torch.exp( 1.j * x), axis=0 ).real.T
-        return x
-    
-    def _bind(self,a,b):
-        return torch.fft.ifft(torch.fft.fft(a, axis=-1) * torch.fft.fft(b, axis=-1), axis=-1).real
-        
+        vsa_output = self._encode(x, ls_mat, F) # agent pose ssp
+        obj_sps = obs[:,self.input_dim:-self.ssp_dim].reshape(obs.shape[0], -1, self.ssp_dim)
+        ssp_grid_pts = self._encode(self.unroll_pts.to(x.device),
+                                    ls_view_mat, F).reshape(1, self.n_pts, self.ssp_dim)
+        vsa_output += torch.sum(self._bind(obj_sps, ssp_grid_pts), axis=1)
+        vsa_output += obs[:,-self.ssp_dim:] # the 'has'/carrying vector
+        vsa_output = vsa_output/torch.linalg.vector_norm(vsa_output, dim=-1, keepdim=True)
+        return vsa_output
+
+class SSPMiniGridMissionFeatures(SSPMiniGridViewFeatures):
+    def __init__(self,
+                 observation_space: gym.spaces.Dict,
+                 features_dim: int,
+                 basis_type: str = 'hex',
+                 rng: Optional[Union[int, np.random.Generator]] = None,
+                 learn_phase_matrix: bool = True,
+                 learn_ls: bool = True,
+                 diff_ls_for_view: bool = False,
+                 **kwargs):
+        super().__init__(observation_space,
+                         features_dim, basis_type, rng,
+                         learn_phase_matrix, learn_ls, diff_ls_for_view, **kwargs)
+        self._features_dim = 2*self._features_dim
+
     def forward(self, obs) -> torch.Tensor:
-        x = obs[:,:self.input_dim]
-        M = self._encode(x)
-        
-        obj_sps = obs[:,self.input_dim:-2*self._features_dim].reshape(obs.shape[0],-1,self._features_dim)
-        ssp_grid_pts = self._encode(self.unroll_grid_pts.to(x.device)).reshape(1, self.n_pts, self._features_dim)
-        M += torch.sum(self._bind(obj_sps, ssp_grid_pts), axis=1)     
-        M += obs[:,-2*self._features_dim:-self._features_dim]
-        O = obs[:,-self._features_dim:]
-        return torch.concatenate([M, O])
-    
-# policy_kwargs = dict(
-#     features_extractor_class=SSPBabyAIViewProcesser,
-#     features_extractor_kwargs=dict(features_dim=128),
-# )
+        x = obs[:, :self.input_dim]
+
+        ls_mat = self._get_ls_matrix(x.device, self.length_scale)
+        ls_view_mat = self._get_ls_matrix(x.device, self.length_scale_view)  # different ls for ego-vec
+        F = self._get_phase_matrix(x.device)
+
+        vsa_output = self._encode(x, ls_mat, F) # agent pose ssp
+        obj_sps = obs[:,self.input_dim:-2*self.ssp_dim].reshape(obs.shape[0], -1, self.ssp_dim)
+        ssp_grid_pts = self._encode(self.unroll_pts.to(x.device),
+                                    ls_view_mat, F).reshape(1, self.n_pts, self.ssp_dim)
+        vsa_output += torch.sum(self._bind(obj_sps, ssp_grid_pts), axis=1)
+        vsa_output += obs[:,-2*self.ssp_dim:-self.ssp_dim] # the 'has'/carrying vector
+        vsa_output = vsa_output/torch.linalg.vector_norm(vsa_output, dim=-1, keepdim=True)
+
+        mission_vec = obs[:, -self.ssp_dim:]
+        return torch.hstack([vsa_output, mission_vec])
+

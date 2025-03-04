@@ -1,3 +1,4 @@
 from .ssp_feature_extractor import SSPFeaturesExtractor
 from .hex_feature_extractor import SSPHexFeaturesExtractor
+from .minigrid_feature_extractor import SSPMiniGridViewFeatures, SSPMiniGridMissionFeatures
 

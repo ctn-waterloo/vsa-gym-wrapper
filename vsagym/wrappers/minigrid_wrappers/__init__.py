@@ -1,4 +1,5 @@
-from .minigrid_pose_wrapper import SSPMiniGridPoseWrapper
+from .minigrid_flat_wrapper import FlatWrapper
+from .minigrid_pose_wrapper import SSPMiniGridPoseWrapper, MiniGridPoseWrapper
 from .minigrid_view_wrapper import SSPMiniGridViewWrapper, PrepMiniGridViewWrapper
 from .minigrid_mission_wrapper import SSPMiniGridMissionWrapper, PrepMiniGridMissionWrapper
 

@@ -27,13 +27,11 @@ A PyPI release is planned for the future.
 - [x] Edit the base feature extractor network to be consistent with new class names
 - [x] Make base feature extractor example in notebook
 - [ ] Support mission + pose (no view) in SSP minigrid wrapper
-- [ ] Edit the MiniGrid feature extractor network to be consistent with new class names
-- [ ] Write install guide, list classes, short usage examples in readme
-- [ ] Make MiniGrid usage example(s) in notebook (combine with the feature extractor too) using stablebaselines
+- [x] Edit the MiniGrid feature extractor network to be consistent with new class names
+- [x] Make MiniGrid usage example(s) in notebook (combine with the feature extractor too) using stablebaselines
 - [ ] Option for having the phase matrix (and/or length scale) as the output of a network instead of fixed parameters
 - [ ] Improved mission statement parsing
 - [ ] Integration with other RL frameworks (e.g., gymjax)
-- [ ] Add link to citation when the thesis is posted
 
 
 ## Background: SSPs and VSAs in Reinforcement Learning

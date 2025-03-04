@@ -18,14 +18,14 @@ authors = [
 ]
 requires-python = ">=3.8"
 dependencies = [
-  "numpy",
-  "scipy",
-  "gymnasium",
-   "torch",
-    "stable_baselines3",
-    "minigrid"
+  "numpy>=1.26.4",
+  "scipy>=1.14.0",
+  "gymnasium>=0.29.0",
+  "torch>=2.3.1",
+  "minigrid>=2.3.1"
 ]
 license = {file = "LICENSE"}
+
 
 [project.urls]
 Homepage = "https://github.com/ctn-waterloo/vsa-gym-wrapper"
@@ -34,6 +34,9 @@ Changelog = "https://github.com/ctn-waterloo/vsa-gym-wrapper/blob/main/CHANGELOG
 # Documentation = "https://vsagym.readthedocs.io/"
 
 [project.optional-dependencies]
+extras = [
+    "stable_baselines3>=2.4"
+]
 dev = [
     "ruff",
     "mypy>=1.0,<2.0",
@@ -52,7 +55,8 @@ dev = [
     "sphinx-copybutton",
     "sphinx-autobuild",
     "sphinx-autodoc-typehints==1.23.3",
-    "packaging"
+    "packaging",
+    "stable_baselines3>=2.4"
 ]
 
 [tool.setuptools.packages.find]

@@ -109,9 +109,3 @@ def test_sspdict():
     dict_space.decode(vsa_embed);
 
 
-test_hex_sspspace()
-test_rand_sspspace()
-# test_sspbox()
-# test_sspdiscrete()
-# test_sspsequence()
-# test_sspdict()

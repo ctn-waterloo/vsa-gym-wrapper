@@ -51,7 +51,8 @@ class SSPMiniGridPoseWrapper(gym.ObservationWrapper):
                 shape_out=shape_out,
                 ssp_space=ssp_space,
                 **kwargs)
-            
+
+        self.shape_in = 3
         self.shape_out = self.ssp_obs_space.shape_out
         self.observation_space["image"] = Box(low=-np.ones(self.shape_out), high=np.ones(self.shape_out),
                                               dtype=self.ssp_obs_space.dtype)
@@ -75,6 +76,33 @@ class SSPMiniGridPoseWrapper(gym.ObservationWrapper):
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         return self.observation(obs), info
+
+
+class MiniGridPoseWrapper(gym.ObservationWrapper):
+    def __init__(
+            self,
+            env: gym.Env,
+            shape_out: Optional[int] = None,
+            **kwargs
+    ):
+        gym.Wrapper.__init__(self, env)
+        self.shape_in = 3
+        self.shape_out = shape_out
+        domain_bounds = np.array([[0, env.unwrapped.width],
+                                  [0, env.unwrapped.height],
+                                  [0, 3]])
+        self.observation_space["image"] = Box(low=domain_bounds[:,0], high=domain_bounds[:,1])
+
+    def observation(self, obs):
+        return {
+            'mission': obs['mission'],
+            'image': np.array([[
+                        self.env.unwrapped.agent_pos[0],
+                        self.env.unwrapped.agent_pos[1],
+                        self.env.unwrapped.agent_dir
+                    ]])
+        }
+
 
 
 

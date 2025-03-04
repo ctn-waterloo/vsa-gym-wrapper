@@ -4,6 +4,8 @@ import gymnasium as gym
 from stable_baselines3 import DQN
 from vsagym import networks
 
+
+
 def test_sspnet():
     env = gym.make('CartPole-v1')
     model = DQN(
@@ -14,6 +16,17 @@ def test_sspnet():
                            features_extractor_kwargs={'features_dim': 251,
                                                       'length_scale': 0.1}),
     )
-    model.learn(total_timesteps=1000)
+    model.learn(total_timesteps=500)
 
-test_sspnet()
+def test_hexsspnet():
+    env = gym.make('CartPole-v1')
+    model = DQN(
+        "MlpPolicy",
+        env,
+        verbose=1,
+        policy_kwargs=dict(features_extractor_class=networks.SSPHexFeaturesExtractor,
+                           features_extractor_kwargs={'features_dim': 251,
+                                                      'length_scale': 0.1}),
+    )
+    model.learn(total_timesteps=500)
+

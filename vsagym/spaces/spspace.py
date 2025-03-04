@@ -2,6 +2,7 @@ import numpy as np
 from typing import Optional, Union, List
 # from functools import singledispatchmethod
 from .sspspace import _get_rng
+from types import MappingProxyType
 
 class SPSpace:
     r"""  Class for Semantic Pointer (SP) representation mapping
@@ -69,12 +70,10 @@ class SPSpace:
         self.names = names
 
         self.idx_to_name = dict(zip(np.arange(self.domain_size), names))
-        self.name_to_vector = dict(zip(names, list(self.vectors)))
-        self.name_to_vector['I'] = self.identity()
-        self.name_to_vector['NULL'] = np.zeros(self.dim)
-        self.name_to_inv_vector = dict(zip(names, list(self.inverse_vectors)))
-        self.name_to_inv_vector['I'] = self.identity()
-        self.name_to_inv_vector['NULL'] = np.zeros(self.dim)
+        self.name_to_vector = dict(zip(names + ['I','NULL'],
+                                [v[None,:] for v in self.vectors] + [self.identity(), np.zeros(self.dim)] ))
+        self.name_to_inv_vector = dict(zip(names + ['I','NULL'],
+                                [v[None,:] for v in self.inverse_vectors] + [self.identity(), np.zeros(self.dim)] ))
         self.name_to_idx = dict(zip(names, np.arange(domain_size)))
 
         # @singledispatchmethod

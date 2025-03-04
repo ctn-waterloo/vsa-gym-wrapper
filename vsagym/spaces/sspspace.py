@@ -467,6 +467,9 @@ class HexagonalSSPSpace(SSPSpace):
                  scale_sampling: Optional[str] = 'lin',
                  rng: Optional[Union[int, np.random.Generator]] = None,
                  **kwargs):
+        assert ssp_dim > 0, 'ssp_dim must be positive'
+        assert ssp_dim > 2*(domain_dim+1) + 1
+
         self.rng = _get_rng(rng)
         # user wants to define ssp with total dim, not number of simplex rotates and scales
         if (n_rotates <= 0) or (n_scales <= 0):

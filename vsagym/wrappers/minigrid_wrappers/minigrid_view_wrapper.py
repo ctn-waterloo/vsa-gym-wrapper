@@ -3,8 +3,6 @@ import gymnasium as gym
 from typing import Optional, Union
 from minigrid.core.constants import (
     COLOR_TO_IDX,
-    IDX_TO_COLOR,
-    IDX_TO_OBJECT,
     OBJECT_TO_IDX,
     STATE_TO_IDX
 )
@@ -18,7 +16,6 @@ from vsagym.spaces.ssp_sequence import SSPSequence
 from vsagym.spaces.ssp_dict import SSPDict
 from gymnasium.spaces import Box
 
-IDX_TO_STATE = {v: k for k, v in STATE_TO_IDX.items()}
 
     
 class SSPMiniGridViewWrapper(SSPMiniGridPoseWrapper):
@@ -28,6 +25,10 @@ class SSPMiniGridViewWrapper(SSPMiniGridPoseWrapper):
     """
     notice_objs = ['DOOR', 'KEY', 'BALL', 'BOX', 'GOAL', 'LAVA'] # subset of objects that are encoded. optionally: add WALL
     notice_states = ['CLOSED', 'LOCKED']
+
+    idx_to_state = {v: k.upper() for k, v in STATE_TO_IDX.items()}
+    idx_to_object = {v: k.upper() for k, v in OBJECT_TO_IDX.items()}
+    idx_to_color = {v: k.upper() for k, v in COLOR_TO_IDX.items()}
 
     def __init__(
         self,
@@ -56,15 +57,15 @@ class SSPMiniGridViewWrapper(SSPMiniGridPoseWrapper):
         self.pose_weight = pose_weight
 
         ## All words/discrete concepts/features to encode
-        self.categories = ['OBJ','STATE','COL','LOCATION','HAS']  # upper case to be consistent with nengo_spa
+        self.categories = ['OBJ','STATE','COL','LOCATION','HAS']  # upper case to be consistent with nengo_spa, mostly here for legacy reasons
         self.commands = ['GO_TO','PUT','NEXT_TO','OPEN','PICK_UP']
         self.locations = ['FRONT', 'BEHIND', 'LEFT', 'RIGHT']  # currently not used
         self.colors = [x.upper() for x in list(COLOR_TO_IDX.keys())]
-        self.color_map = dict(zip(list(COLOR_TO_IDX.keys()), self.colors))
-        self.objects = [x for x in list(OBJECT_TO_IDX.keys())]
+        self.color_map = dict(zip(self.colors, self.colors))
+        self.objects = [x.upper() for x in list(OBJECT_TO_IDX.keys())]
         self.obj_map = dict(zip(self.objects,
-                                [o if o in self.notice_objs else 'NULL' for o in self.objects])) # NULL (zero) means completely ignore this object
-        self.states = [x for x in list(STATE_TO_IDX.keys())]
+                                [o if o in self.notice_objs else 'I' for o in self.objects]))
+        self.states = [x.upper() for x in list(STATE_TO_IDX.keys())]
         self.state_map = dict(zip(self.states,
                                   [s if s in self.notice_states else 'I' for s in self.states])) # I (identity) means ignore the state of an object, but not the object itself
 
@@ -109,20 +110,17 @@ class SSPMiniGridViewWrapper(SSPMiniGridPoseWrapper):
 
 
         self.view_type = view_type
-        if view_type=='local':
+        if view_type == 'local':
             self._encode_grid = self._encode_grid_local
             self._get_grid_pos = self._get_grid_pos_local
-        elif view_type=='global':
+        elif view_type == 'global':
             self._encode_grid = self._encode_grid_global
             self._get_grid_pos = self._get_grid_pos_global
         else:
             raise NotImplementedError
 
-    def _encode_grid_local(self, i, j):
-        return self.ssp_pos_grid[i, j, :]
-
     def _get_grid_pos_local(self, i, j):
-        return np.array([self.grid_pts[0, i, j], self.grid_pts[1, i, j], -1])
+        return np.array([self.grid_pts[0][i, j], self.grid_pts[1][i, j], -1])
 
     def _get_grid_pos_global(self, i, j):
         x=0
@@ -140,36 +138,45 @@ class SSPMiniGridViewWrapper(SSPMiniGridPoseWrapper):
         return np.array([sign_x*self.grid_pts[x][i, j] + self.env.unwrapped.agent_pos[0],##double check
                          sign_y*self.grid_pts[y][i, j] + self.env.unwrapped.agent_pos[1], -1])
 
+    def _encode_grid_local(self, i, j):
+        return self.ssp_pos_grid[i, j, :].copy()
+
     def _encode_grid_global(self, i, j):
         obj_ssp = self.ssp_obs_space.encode(self._get_grid_pos(i,j))
         return obj_ssp
 
     def _encode_object_allbound(self, obj_name, col_name, state_name):
         obj_sp = self.sp_space.bind(
-            self.sp_space.name_to_vector[obj_name],
-            self.sp_space.name_to_vector[col_name],
-            self.sp_space.name_to_vector[state_name])
+            self.sp_space.name_to_vector[obj_name].copy(),
+            self.sp_space.name_to_vector[col_name].copy(),
+            self.sp_space.name_to_vector[state_name].copy())
         return obj_sp
 
     def _encode_object_slotfiller(self, obj_name, col_name, state_name):
         obj_sp = self.sp_space.bind(
-            self.sp_space.name_to_vector[obj_name],
-            self.sp_space.name_to_vector[col_name],
-            self.sp_space.name_to_vector[state_name])
+            self.sp_space.name_to_vector['OBJ'].copy(),
+            self.sp_space.name_to_vector[obj_name].copy())
+        obj_sp += self.sp_space.bind(
+            self.sp_space.name_to_vector['COL'].copy(),
+            self.sp_space.name_to_vector[col_name].copy())
+        obj_sp += self.sp_space.bind(
+            self.sp_space.name_to_vector['STATE'].copy(),
+            self.sp_space.name_to_vector[state_name].copy())
+        obj_sp = obj_sp/np.linalg.norm(obj_sp, axis=-1, keepdims=True)
         return obj_sp
 
     def _encode_view(self, img):
         vsa_output = np.zeros(self.shape_out)
         for i in range(img.shape[0]):
             for j in range(img.shape[1]):
-                obj = img[i, j, 0]
-                color = img[i, j, 1]
-                state = img[i, j, 2]
-                if obj not in [0,1]:     
+                obj = self.idx_to_object[img[i, j, 0]]
+                color = self.idx_to_color[img[i, j, 1]]
+                state = self.idx_to_state[img[i, j, 2]]
+                if obj in self.notice_objs:
                     obj_ssp = self._encode_grid(i,j)
-                    obj_name = self.obj_map[IDX_TO_OBJECT[obj]]  
-                    col_name = self.color_map[IDX_TO_COLOR[color]]
-                    state_name = self.state_map[IDX_TO_STATE[state]]
+                    obj_name = self.obj_map[obj]
+                    col_name = self.color_map[color]
+                    state_name = self.state_map[state]
                     
                     obj_vec = self.sp_space.bind(
                         self._encode_object(obj_name, col_name, state_name),
@@ -179,12 +186,12 @@ class SSPMiniGridViewWrapper(SSPMiniGridPoseWrapper):
     
     def _encode_carry(self):
         if self.env.unwrapped.carrying is not None:
-            obj_name = self.obj_map[self.env.unwrapped.carrying.type]  
-            col_name = self.color_map[self.env.unwrapped.carrying.color]
+            obj_name = self.obj_map[self.env.unwrapped.carrying.type.upper()]
+            col_name = self.color_map[self.env.unwrapped.carrying.color.upper()]
 
             has_sp = self.sp_space.bind(
-                self.sp_space.name_to_vector['HAS'],
-                self._encode_object(obj_name, col_name, 'NULL')
+                self.sp_space.name_to_vector['HAS'].copy(),
+                self._encode_object(obj_name, col_name, 'I')
             )
             return has_sp
         else:
@@ -219,7 +226,7 @@ class PrepMiniGridViewWrapper(SSPMiniGridViewWrapper):
         
         super().__init__(env, ssp_space, shape_out, obj_encoding, **kwargs)
         n_ssp_dims = (1+self.view_width*self.view_height)
-        self.observation_space = Box(low=-np.ones(n_ssp_dims*self.shape_out + self.shape_in),
+        self.observation_space['image'] = Box(low=-np.ones(n_ssp_dims*self.shape_out + self.shape_in),
                                      high=np.max([env.unwrapped.width, env.unwrapped.height])*np.ones(n_ssp_dims*self.shape_out + self.shape_in),
                                      dtype=self.ssp_obs_space.dtype)
 
@@ -228,20 +235,19 @@ class PrepMiniGridViewWrapper(SSPMiniGridViewWrapper):
         obj_sps = []
         for i in range(img.shape[0]):
             for j in range(img.shape[1]):
-                obj = img[i, j, 0]
-                color = img[i, j, 1]
-                state = img[i, j, 2]
-                obj_pos = self._get_grid_pos(i,j)
-                if obj not in [0, 1]:
-                    obj_ssp = self.ssp_pos_grid[i, j, :]
-                    obj_name = self.obj_map[IDX_TO_OBJECT[obj]]
-                    col_name = self.color_map[IDX_TO_COLOR[color]]
-                    state_name = self.state_map[IDX_TO_STATE[state]]
+                obj = self.idx_to_object[img[i, j, 0]]
+                color = self.idx_to_color[img[i, j, 1]]
+                state = self.idx_to_state[img[i, j, 2]]
+                obj_pos = self._get_grid_pos(i, j)
+                if obj in self.notice_objs:
+                    obj_name = self.obj_map[obj]
+                    col_name = self.color_map[color]
+                    state_name = self.state_map[state]
 
-                    obj_sp=self._encode_object(obj_name, col_name, state_name)
-                    obj_sps.append(obj_sp)
+                    obj_sp = self._encode_object(obj_name, col_name, state_name)
+                    obj_sps.append(obj_sp.flatten())
                 else:
-                    obj_sps.append(self.sp_space.name_to_vector['NULL'])
+                    obj_sps.append(self.sp_space.name_to_vector['NULL'].flatten())
                 obj_poss.append(obj_pos)
         return obj_poss, obj_sps
 
@@ -254,7 +260,9 @@ class PrepMiniGridViewWrapper(SSPMiniGridViewWrapper):
                              ])
         has_vector = self._encode_carry()
         obj_poss, obj_sps = self._encode_view(img)
+        # TODO: pass obj_poss so that the MiniGrid feature extractors support global view too
+
         return {
             'mission': obs['mission'],
-            'image': np.hstack([agt_pt, np.array(obj_sps).flatten(), has_vector])
+            'image': np.hstack([agt_pt, np.array(obj_sps).flatten(), has_vector.flatten()])
         }
