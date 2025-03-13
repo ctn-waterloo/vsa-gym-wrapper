@@ -140,11 +140,15 @@ If you use `vsagym` in your research, please cite the following PhD thesis:
 
 ```
 @phdthesis{dumont2025,
-  author  = {Nicole Sandra-Yaffa Dumont},
-  title   = {Symbols, Dynamics, and Maps: A Neurosymbolic Approach to Spatial Cognition},
-  school  = {Univeristy of Waterloo},
-  year    = {2025}
-}
+    title={Symbols, Dynamics, and Maps: A Neurosymbolic Approach to Spatial Cognition},
+    author={Nicole Sandra-Yaffa Dumont},
+    type={PhD Thesis},
+    school={University of Waterloo},
+    address={Waterloo, ON},
+    year={2025},
+    publisher="UWSpace",
+    url={https://hdl.handle.net/10012/21501} 
+  }
 ```
 
 
