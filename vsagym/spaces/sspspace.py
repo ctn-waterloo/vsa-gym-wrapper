@@ -509,6 +509,8 @@ class HexagonalSSPSpace(SSPSpace):
 
         if (n_rotates == 1) or (domain_dim == 1):
             phases_scaled_rotated = phases_scaled
+            R_mats=None
+
         elif domain_dim == 2:
             angles = np.linspace(0, 2 * np.pi / 3, n_rotates, endpoint=False)
             R_mats = np.stack([np.stack([np.cos(angles), -np.sin(angles)], axis=1),
