@@ -92,7 +92,7 @@ class SPSpace:
             Semantic Pointers.
 
         """
-        if i.dtype == str:
+        if type(i) == str:
             return np.array([self.name_to_vector[_i] for _i in list(i)])
         else:
             i = np.array(i)
