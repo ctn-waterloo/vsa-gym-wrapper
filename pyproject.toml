@@ -26,7 +26,6 @@ dependencies = [
 ]
 license = {file = "LICENSE"}
 
-
 [project.urls]
 Homepage = "https://github.com/ctn-waterloo/vsa-gym-wrapper"
 Repository = "https://github.com/ctn-waterloo/vsa-gym-wrapper"
@@ -36,6 +35,20 @@ Changelog = "https://github.com/ctn-waterloo/vsa-gym-wrapper/blob/main/CHANGELOG
 [project.optional-dependencies]
 extras = [
     "stable_baselines3>=2.4"
+]
+jax = [
+    "jax>=0.4.25",
+    "jaxlib>=0.4.25",
+]
+gymnax = [
+    "jax>=0.4.25",
+    "jaxlib>=0.4.25",
+    "gymnax>=0.0.9",
+]
+xland = [
+    "jax>=0.4.25",
+    "jaxlib>=0.4.25",
+    "xminigrid>=0.9.0",
 ]
 dev = [
     "ruff",
@@ -56,7 +69,11 @@ dev = [
     "sphinx-autobuild",
     "sphinx-autodoc-typehints==1.23.3",
     "packaging",
-    "stable_baselines3>=2.4"
+    "stable_baselines3>=2.4",
+    "jax>=0.4.25",
+    "jaxlib>=0.4.25",
+    "gymnax>=0.0.9",
+    "xminigrid>=0.9.0",
 ]
 
 [tool.setuptools.packages.find]

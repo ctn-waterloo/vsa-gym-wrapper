@@ -31,16 +31,16 @@ def test_sspbox():
     box_space = spaces.SSPBox(-1, 1, 2, shape_out=ssp_dim, decoder_method='from-set', length_scale=None)
     box_space = spaces.SSPBox(-1, 1, 2, shape_out=ssp_dim, decoder_method='from-set', length_scale=0.1)
     x = np.array([0.1, -0.3])
-    ssp = box_space.encode(x)
     box_space.sample();
     box_space.samples(2);
 
+    # Verify that SSPBox.encode matches the underlying SSPSpace.encode directly
     ssp_space = spaces.HexagonalSSPSpace(2,
                                      n_scales=4, n_rotates=4,
                                      length_scale=0.1)
-
-    box_space = spaces.SSPBox(-1, 1, 2,ssp_space=ssp_space)
-    assert np.allclose(ssp, box_space.encode(x))
+    box_space2 = spaces.SSPBox(-1, 1, 2, ssp_space=ssp_space)
+    x2d = np.atleast_2d(x)
+    assert np.allclose(box_space2.encode(x2d), ssp_space.encode(x2d))
 
 def test_sspdiscrete():
     ssp_dim = 151

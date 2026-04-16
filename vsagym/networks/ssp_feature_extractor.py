@@ -40,6 +40,13 @@ class SSPFeaturesExtractor(nn.Module):
         else:
             initial_ls = torch.Tensor(np.clip( ( np.abs( observation_space.high - observation_space.low ) ),
                                                a_min = 1e-4, a_max = 1e4) / 10.)
+        # When input_dim differs from obs_space dim (e.g. MiniGrid wrappers), trim or
+        # broadcast initial_ls to match self.input_dim.
+        if initial_ls.shape[0] != self.input_dim:
+            if initial_ls.shape[0] > self.input_dim:
+                initial_ls = initial_ls[:self.input_dim]
+            else:
+                initial_ls = initial_ls.mean() * torch.ones(self.input_dim)
             
         if basis_type == 'hex':
             ssp_space = HexagonalSSPSpace(self.input_dim, features_dim, rng=rng, **kwargs)

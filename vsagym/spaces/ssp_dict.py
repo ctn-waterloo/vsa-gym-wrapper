@@ -135,16 +135,25 @@ class SSPDict(Space[typing.Dict[str, Any]], typing.Mapping[str, Space[Any]]):
             for key in seed.keys():
                 seeds += self.spaces[key].seed(seed[key])
         elif isinstance(seed, int):
-            seeds = super().seed(seed)
+            result = super().seed(seed)
+            seeds = list(result) if isinstance(result, (list, tuple)) else ([result] if result is not None else [])
             # Using `np.int32` will mean that the same key occurring is extremely low, even for large subspaces
             subseeds = self.np_random.integers(
                 np.iinfo(np.int32).max, size=len(self.spaces)
             )
             for subspace, subseed in zip(self.spaces.values(), subseeds):
-                seeds += subspace.seed(int(subseed))
+                result = subspace.seed(int(subseed))
+                if isinstance(result, (list, tuple)):
+                    seeds += list(result)
+                elif result is not None:
+                    seeds.append(result)
         elif seed is None:
             for space in self.spaces.values():
-                seeds += space.seed(None)
+                result = space.seed(None)
+                if isinstance(result, (list, tuple)):
+                    seeds += list(result)
+                elif result is not None:
+                    seeds.append(result)
         else:
             raise TypeError(
                 f"Expected seed type: dict, int or None, actual type: {type(seed)}"

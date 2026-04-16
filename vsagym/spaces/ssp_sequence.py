@@ -43,7 +43,8 @@ class SSPSequence(Space[np.ndarray]):
         self.length = length
         
         if ssp_order_space is None:
-            ssp_order_space = RandomSSPSpace(1, ssp_dim=space.ssp_space.ssp_dim,
+            # shape_out works for both SSPBox (SSPSpace) and SSPDiscrete (SPSpace)
+            ssp_order_space = RandomSSPSpace(1, ssp_dim=space.shape_out,
                  domain_bounds=np.array([[0,self.length]]), length_scale=1, rng=seed)
              
         self.ssp_order_space = ssp_order_space

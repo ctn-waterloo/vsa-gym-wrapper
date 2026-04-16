@@ -344,6 +344,16 @@ class SSPBox(Space[np.ndarray]):
         if not hasattr(self, "high_repr"):
             self.high_repr = _short_repr(self.high)
             
+def get_inf(dtype, inf_sign: str):
+    """Return the largest (or smallest) finite value for *dtype*, or ±inf for floats."""
+    if np.issubdtype(dtype, np.floating):
+        return np.inf if inf_sign == "+" else -np.inf
+    elif np.issubdtype(dtype, np.integer):
+        info = np.iinfo(dtype)
+        return info.max if inf_sign == "+" else info.min
+    raise TypeError(f"get_inf: unsupported dtype {dtype}")
+
+
 def get_precision(dtype) -> SupportsFloat:
     """Get precision of a data type."""
     if np.issubdtype(dtype, np.floating):
