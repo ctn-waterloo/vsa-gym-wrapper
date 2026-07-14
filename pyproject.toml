@@ -39,6 +39,7 @@ extras = [
 jax = [
     "jax>=0.4.25",
     "jaxlib>=0.4.25",
+    "flax>=0.8",
 ]
 gymnax = [
     "jax>=0.4.25",
@@ -72,6 +73,7 @@ dev = [
     "stable_baselines3>=2.4",
     "jax>=0.4.25",
     "jaxlib>=0.4.25",
+    "flax>=0.8",
     "gymnax>=0.0.9",
     "xminigrid>=0.9.0",
 ]

@@ -90,6 +90,92 @@ class TestSSPFeaturesExtractor:
 
 
 # ---------------------------------------------------------------------------
+# NN-modulated encoding parameters (ls_mode / phase_mode = 'nn')
+# ---------------------------------------------------------------------------
+
+
+class TestNNModulatedExtractor:
+    @pytest.fixture(scope="class")
+    def obs_space(self):
+        return _box(-1.0, 1.0, (4,))
+
+    @pytest.fixture(scope="class")
+    def static_extractor(self, obs_space):
+        return SSPFeaturesExtractor(obs_space, features_dim=51, basis_type="hex",
+                                    rng=0)
+
+    @pytest.mark.parametrize("modes", [
+        {"ls_mode": "nn"},
+        {"phase_mode": "nn"},
+        {"ls_mode": "nn", "phase_mode": "nn"},
+    ])
+    def test_output_shape(self, obs_space, modes):
+        ext = SSPFeaturesExtractor(obs_space, features_dim=51, basis_type="hex",
+                                   rng=0, **modes)
+        x = torch.randn(8, 4)
+        out = ext(x)
+        assert out.shape == (8, ext.features_dim)
+
+    @pytest.mark.parametrize("modes", [
+        {"ls_mode": "nn"},
+        {"phase_mode": "nn"},
+        {"ls_mode": "nn", "phase_mode": "nn"},
+    ])
+    def test_init_matches_static_encoding(self, obs_space, static_extractor, modes):
+        # The modulation MLPs are zero-initialized, so at init the encoding
+        # must equal the static one.
+        ext = SSPFeaturesExtractor(obs_space, features_dim=51, basis_type="hex",
+                                   rng=0, **modes)
+        x = torch.randn(8, 4)
+        with torch.no_grad():
+            err = (ext(x) - static_extractor(x)).abs().max()
+        assert float(err) < 1e-5
+
+    def test_nn_modules_created(self, obs_space):
+        ext = SSPFeaturesExtractor(obs_space, features_dim=51, rng=0,
+                                   ls_mode="nn", phase_mode="nn")
+        assert hasattr(ext, "length_scale_net")
+        assert hasattr(ext, "phase_matrix_net")
+        assert not hasattr(ext, "length_scale")
+        assert not hasattr(ext, "phase_matrix")
+
+    def test_differentiable(self, obs_space):
+        ext = SSPFeaturesExtractor(obs_space, features_dim=51, rng=0,
+                                   ls_mode="nn", phase_mode="nn")
+        x = torch.randn(8, 4)
+        (ext(x) ** 2).sum().backward()
+        ls_head = ext.length_scale_net.net[-1]
+        phase_head = ext.phase_matrix_net.net[-1]
+        assert float(ls_head.weight.grad.abs().sum()) > 0
+        assert float(phase_head.bias.grad.abs().sum()) > 0
+
+    def test_nn_ls_becomes_input_dependent(self, obs_space):
+        ext = SSPFeaturesExtractor(obs_space, features_dim=51, rng=0,
+                                   ls_mode="nn")
+        x = torch.randn(16, 4)
+        opt = torch.optim.SGD(ext.parameters(), lr=1.0)
+        for _ in range(3):
+            opt.zero_grad()
+            (ext(x) ** 2).sum().backward()
+            opt.step()
+        with torch.no_grad():
+            ls_out = ext.length_scale_net(x)
+        assert float(ls_out.std(dim=0).sum()) > 0
+
+    def test_invalid_modes(self, obs_space):
+        with pytest.raises(ValueError):
+            SSPFeaturesExtractor(obs_space, features_dim=51, ls_mode="bad")
+        with pytest.raises(ValueError):
+            SSPFeaturesExtractor(obs_space, features_dim=51, phase_mode="bad")
+
+    def test_legacy_bool_flags_still_work(self, obs_space):
+        ext = SSPFeaturesExtractor(obs_space, features_dim=51, rng=0,
+                                   learn_phase_matrix=False, learn_ls=False)
+        assert ext.phase_mode == "fixed" and not ext.phase_matrix.requires_grad
+        assert ext.ls_mode == "fixed" and not ext.length_scale.requires_grad
+
+
+# ---------------------------------------------------------------------------
 # SSPHexFeaturesExtractor
 # ---------------------------------------------------------------------------
 
@@ -126,6 +212,42 @@ class TestSSPHexFeaturesExtractor:
         x = torch.randn(3, 2)  # only 2-D input despite obs space being 10-D
         out = ext(x)
         assert out.shape[0] == 3
+
+    def test_nn_scales_mode(self):
+        obs_space = _box(-1.0, 1.0, (2,))
+        ext = SSPHexFeaturesExtractor(obs_space, features_dim=51, rng=0,
+                                      phase_mode="nn", ls_mode="nn")
+        assert hasattr(ext, "scale_net")
+        assert not hasattr(ext, "scales")
+        x = torch.randn(6, 2)
+        out = ext(x)
+        assert out.shape == (6, ext.features_dim)
+        (out ** 2).sum().backward()
+        assert float(ext.scale_net.net[-1].weight.grad.abs().sum()) > 0
+        assert float(ext.rotation_learners[0].params.grad.abs().sum()) > 0
+
+    def test_nn_scales_init_matches_static(self):
+        obs_space = _box(-1.0, 1.0, (2,))
+        static = SSPHexFeaturesExtractor(obs_space, features_dim=51, rng=0)
+        ext = SSPHexFeaturesExtractor(obs_space, features_dim=51, rng=0,
+                                      phase_mode="nn")
+        # Rotations are randomly initialized; align them so only the
+        # scale parametrization differs.
+        with torch.no_grad():
+            for rl_static, rl_nn in zip(static.rotation_learners,
+                                        ext.rotation_learners):
+                rl_nn.params.copy_(rl_static.params)
+        x = torch.randn(6, 2)
+        with torch.no_grad():
+            err = (ext(x) - static(x)).abs().max()
+        assert float(err) < 1e-5
+
+    def test_fixed_phase_mode(self):
+        obs_space = _box(-1.0, 1.0, (2,))
+        ext = SSPHexFeaturesExtractor(obs_space, features_dim=51, rng=0,
+                                      phase_mode="fixed")
+        assert not ext.scales.requires_grad
+        assert not ext.rotation_learners[0].params.requires_grad
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +307,23 @@ class TestSSPMiniGridViewFeatures:
         # Output should be approximately unit norm
         for norm in norms:
             assert float(norm) == pytest.approx(1.0, abs=0.01)
+
+    def test_nn_modes(self):
+        # NN-modulated ls/phase also work through the MiniGrid extractor
+        n_pts = self.VIEW_W * self.VIEW_H
+        features_dim = 51
+        dummy_dim = self.INPUT_DIM + n_pts * features_dim + features_dim
+        obs_space = _box(-1.0, 7.0, (dummy_dim,))
+        ext_tmp = SSPMiniGridViewFeatures(obs_space, features_dim=features_dim, rng=0)
+        real_dim = self.INPUT_DIM + n_pts * ext_tmp.ssp_dim + ext_tmp.ssp_dim
+        ext = SSPMiniGridViewFeatures(
+            _box(-1.0, 7.0, (real_dim,)), features_dim=features_dim, rng=0,
+            ls_mode="nn", phase_mode="nn", diff_ls_for_view=True,
+        )
+        obs = torch.randn(4, real_dim)
+        out = ext(obs)
+        assert out.shape == (4, ext.ssp_dim)
+        assert hasattr(ext, "length_scale_view_net")
 
 
 # ---------------------------------------------------------------------------

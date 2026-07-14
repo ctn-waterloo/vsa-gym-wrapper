@@ -139,14 +139,14 @@ class TestSSPSpaceEncode:
         x1 = np.array([[0.5, 0.5]])
         x2 = np.array([[0.51, 0.51]])
         x3 = np.array([[0.9, 0.9]])
-        sim_close = float(rand_space.encode(x1) @ rand_space.encode(x2).T)
-        sim_far = float(rand_space.encode(x1) @ rand_space.encode(x3).T)
+        sim_close = (rand_space.encode(x1) @ rand_space.encode(x2).T).item()
+        sim_far = (rand_space.encode(x1) @ rand_space.encode(x3).T).item()
         assert sim_close > sim_far
 
     def test_encode_self_similarity_high(self, rand_space):
         x = np.array([[0.3, 0.7]])
         phi = rand_space.encode(x)
-        sim = float(phi @ phi.T)
+        sim = (phi @ phi.T).item()
         assert sim > 0.9
 
 
@@ -169,7 +169,7 @@ class TestSSPSpaceBind:
         bound = rand_space.bind(a, b)
         inv_b = rand_space.invert(b)
         recovered = rand_space.bind(bound, inv_b)
-        sim = float(recovered @ a.T)
+        sim = (recovered @ a.T).item()
         assert sim > 0.5  # should be positively similar
 
 
@@ -289,7 +289,7 @@ class TestSPSpace:
         for i in range(5):
             v = sp_space.encode(np.array([i]))
             idx = sp_space.decode(v)
-            assert int(idx) == i
+            assert idx.item() == i
 
     def test_encode_by_name(self, sp_space):
         name = sp_space.names[0]

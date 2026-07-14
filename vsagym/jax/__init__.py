@@ -33,10 +33,18 @@ Quick start
 >>> wrapper = XLandSSPPoseWrapper(env, env_params, shape_out=151)
 >>> timestep = jax.jit(wrapper.reset)(env_params, jax.random.PRNGKey(0))
 
+**flax feature-extractor networks** (requires ``flax``):
+
+>>> from vsagym.jax.networks import SSPFeaturesExtractor, get_ssp_dim
+>>> model = SSPFeaturesExtractor(input_dim=2, features_dim=151, ls_mode='nn')
+>>> params = model.init(jax.random.PRNGKey(0), jnp.ones((1, 2)))
+>>> phi = model.apply(params, jnp.zeros((8, 2)))
+
 Modules
 -------
 sspspace     — JAX SSPSpace, RandomSSPSpace, HexagonalSSPSpace + pure functions
 spspace      — JAX SPSpace for discrete symbols
+networks     — flax (Linen) SSP feature-extractor networks (requires flax)
 gymnax_wrappers  — gymnax environment wrappers
 xland_wrappers   — xland-minigrid environment wrappers
 """
@@ -62,6 +70,19 @@ from vsagym.jax.xland_wrappers import (
     XLandSSPViewWrapper,
 )
 
+try:  # flax is an optional dependency (pip install vsagym[jax])
+    from vsagym.jax.networks import (
+        ModulationMLP,
+        SSPFeaturesExtractor,
+        SSPHexFeaturesExtractor,
+        SSPMiniGridMissionFeatures,
+        SSPMiniGridViewFeatures,
+        get_ssp_dim,
+    )
+    _HAS_FLAX = True
+except ImportError:
+    _HAS_FLAX = False
+
 __all__ = [
     # SSP spaces
     "JaxSSPSpace",
@@ -84,3 +105,14 @@ __all__ = [
     "XLandSSPPoseWrapper",
     "XLandSSPViewWrapper",
 ]
+
+if _HAS_FLAX:
+    __all__ += [
+        # flax feature-extractor networks
+        "ModulationMLP",
+        "SSPFeaturesExtractor",
+        "SSPHexFeaturesExtractor",
+        "SSPMiniGridViewFeatures",
+        "SSPMiniGridMissionFeatures",
+        "get_ssp_dim",
+    ]

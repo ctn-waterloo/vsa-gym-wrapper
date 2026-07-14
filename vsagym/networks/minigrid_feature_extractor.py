@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import gymnasium as gym
 import torch
@@ -19,13 +21,26 @@ class SSPMiniGridViewFeatures(SSPFeaturesExtractor):
                  learn_ls: bool = True,
                  diff_ls_for_view: bool = False,
                  view_width: int = 7, view_height: int = 7,
+                 ls_mode: Optional[str] = None,
+                 phase_mode: Optional[str] = None,
+                 nn_hidden_dim: int = 32,
+                 nn_n_layers: int = 1,
                  **kwargs):
         input_dim = 3
         super().__init__(observation_space,
                         features_dim, basis_type, rng, input_dim,
-                        learn_phase_matrix, learn_ls, **kwargs)
+                        learn_phase_matrix, learn_ls,
+                        ls_mode=ls_mode, phase_mode=phase_mode,
+                        nn_hidden_dim=nn_hidden_dim, nn_n_layers=nn_n_layers,
+                        **kwargs)
 
-        if diff_ls_for_view:
+        self.diff_ls_for_view = diff_ls_for_view
+        if self.ls_mode == 'nn':
+            if diff_ls_for_view:
+                self.length_scale_view_net = copy.deepcopy(self.length_scale_net)
+            else:
+                self.length_scale_view_net = self.length_scale_net
+        elif diff_ls_for_view:
             self.length_scale_view = nn.Parameter(self.length_scale.clone().detach(),
                                                   requires_grad=learn_ls)
         else:
@@ -42,17 +57,29 @@ class SSPMiniGridViewFeatures(SSPFeaturesExtractor):
         self.unroll_pts = torch.Tensor(np.hstack([pts, -1 * np.ones((pts.shape[0], 1))]))
         self.n_pts = self.unroll_pts.shape[0]
 
+    def _compute_ls_view(self, pts):
+        """Log inverse length scale for the ego-view grid points."""
+        if self.ls_mode == 'nn':
+            return self.length_scale_view_net(pts)
+        return self.length_scale_view
+
+    def _encode_pose_and_grid(self, x):
+        """Encode the agent pose and the ego-view grid points."""
+        log_inv_ls = self._compute_ls(x)
+        F = self._compute_phase_matrix(x)
+        pose_ssp = self._encode_flexible(x, log_inv_ls, F)
+
+        unroll_pts = self.unroll_pts.to(x.device)
+        log_inv_ls_view = self._compute_ls_view(unroll_pts)  # different ls for ego-vec
+        F_view = self._compute_phase_matrix(unroll_pts)
+        ssp_grid_pts = self._encode_flexible(unroll_pts, log_inv_ls_view,
+                                             F_view).reshape(1, self.n_pts, self.ssp_dim)
+        return pose_ssp, ssp_grid_pts
+
     def forward(self, obs) -> torch.Tensor:
         x = obs[:, :self.input_dim]
-
-        ls_mat = self._get_ls_matrix(x.device, self.length_scale)
-        ls_view_mat = self._get_ls_matrix(x.device, self.length_scale_view)  # different ls for ego-vec
-        F = self._get_phase_matrix(x.device)
-
-        vsa_output = self._encode(x, ls_mat, F) # agent pose ssp
+        vsa_output, ssp_grid_pts = self._encode_pose_and_grid(x)
         obj_sps = obs[:,self.input_dim:-self.ssp_dim].reshape(obs.shape[0], -1, self.ssp_dim)
-        ssp_grid_pts = self._encode(self.unroll_pts.to(x.device),
-                                    ls_view_mat, F).reshape(1, self.n_pts, self.ssp_dim)
         vsa_output += torch.sum(self._bind(obj_sps, ssp_grid_pts), axis=1)
         vsa_output += obs[:,-self.ssp_dim:] # the 'has'/carrying vector
         vsa_output = vsa_output/torch.linalg.vector_norm(vsa_output, dim=-1, keepdim=True)
@@ -75,19 +102,11 @@ class SSPMiniGridMissionFeatures(SSPMiniGridViewFeatures):
 
     def forward(self, obs) -> torch.Tensor:
         x = obs[:, :self.input_dim]
-
-        ls_mat = self._get_ls_matrix(x.device, self.length_scale)
-        ls_view_mat = self._get_ls_matrix(x.device, self.length_scale_view)  # different ls for ego-vec
-        F = self._get_phase_matrix(x.device)
-
-        vsa_output = self._encode(x, ls_mat, F) # agent pose ssp
+        vsa_output, ssp_grid_pts = self._encode_pose_and_grid(x)
         obj_sps = obs[:,self.input_dim:-2*self.ssp_dim].reshape(obs.shape[0], -1, self.ssp_dim)
-        ssp_grid_pts = self._encode(self.unroll_pts.to(x.device),
-                                    ls_view_mat, F).reshape(1, self.n_pts, self.ssp_dim)
         vsa_output += torch.sum(self._bind(obj_sps, ssp_grid_pts), axis=1)
         vsa_output += obs[:,-2*self.ssp_dim:-self.ssp_dim] # the 'has'/carrying vector
         vsa_output = vsa_output/torch.linalg.vector_norm(vsa_output, dim=-1, keepdim=True)
 
         mission_vec = obs[:, -self.ssp_dim:]
         return torch.hstack([vsa_output, mission_vec])
-
